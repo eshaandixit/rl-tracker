@@ -8,6 +8,11 @@ A small overlay window for Rocket League that shows ranks for everyone in your l
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
+<img src="images/overlay.png" alt="Overlay showing a 2v2 lobby" width="49%">
+<img src="images/overlay-transparent.png" alt="The same overlay with the background faded over the game" width="49%">
+
+<sub>Full opacity vs transparent</sub>
+
 </div>
 
 ## Setup
@@ -17,8 +22,11 @@ A small overlay window for Rocket League that shows ranks for everyone in your l
 Install [Python 3.9 or newer](https://www.python.org/downloads/windows/), then run this from the project folder:
 
 ```
-py -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
+
+> [!TIP]
+> If `python` isn't recognized, use `py` instead in all the commands below (or reinstall Python with "Add python.exe to PATH" checked).
 
 ### 2. Turn on Rocket League's Stats API
 
@@ -37,12 +45,12 @@ Port=49123
 PacketSendRate=10
 ```
 
-### 3. Run it
+### 3. Run the python script
 
 Launch Rocket League, then run from your terminal or IDE:
 
 ```
-py rl-tracker.py
+python rl-tracker.py
 ```
 
 
@@ -61,14 +69,14 @@ py rl-tracker.py
 ## Options
 
 ```
-py rl-tracker.py --test PLATFORM ID   # show one profile without the game
-py rl-tracker.py --port 49123         # use a different Stats API port
+python rl-tracker.py --test PLATFORM ID   # show one profile without the game
+python rl-tracker.py --port 49123         # use a different Stats API port
 ```
 
 `PLATFORM` is one of `steam`, `epic`, `psn`, `xbl` or `switch`. Steam uses the 17-digit Steam ID; other platforms use the account name. For example:
 
 ```
-py rl-tracker.py --test steam 76561198000000000
+python rl-tracker.py --test steam 76561198000000000
 ```
 
 ## Troubleshooting

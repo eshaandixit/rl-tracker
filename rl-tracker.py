@@ -20,7 +20,7 @@ try:
     from curl_cffi import requests as http
     from PIL import Image, ImageDraw, ImageOps, ImageTk
 except ImportError:
-    sys.exit("Missing packages. Run:  py -m pip install -r requirements.txt")
+    sys.exit("Missing packages. Run:  python -m pip install -r requirements.txt")
 
 BROWSERS = ["safari", "firefox", "chrome", "edge"]
 
