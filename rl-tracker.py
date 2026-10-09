@@ -9,6 +9,7 @@ import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from urllib.parse import quote
@@ -30,6 +31,7 @@ MIN_OPACITY = 10
 STATS_HOST = "127.0.0.1"
 STATS_PORT = 49123
 API_URL = "https://api.tracker.gg/api/v2/rocket-league/standard/profile/{platform}/{identifier}"
+PROFILE_URL = "https://rocketleague.tracker.network/rocket-league/profile/{platform}/{identifier}/overview"
 CACHE_TTL = 600
 REQUEST_GAP = 0.75
 BACKOFF = 60
@@ -47,12 +49,12 @@ PLATFORMS = {"steam": "steam", "epic": "epic", "ps4": "psn", "ps5": "psn", "psn"
 PLAYLISTS = {10: "1v1", 11: "2v2", 13: "3v3"}
 TEAM_SIZE_TO_PLAYLIST = {1: 10, 2: 11, 3: 13}
 
-BG, ROW_ME, SEP = "#0c0c0c", "#2a0e12", "#3d1519"
+BG, ROW_ME, SEP = "#0c0c0c", "#262626", "#3a3a3a"
 KEY = "#0c0c0d"
 OUTLINE = "#000000"
-FG, DIM, RED = "#e6e6e6", "#a08a8c", "#ff6b6b"
+FG, DIM = "#f0f0f0", "#8c8c8c"
 BLUE, ORANGE = "#4aa3ff", "#ff9f43"
-BTN_BG, BTN_ON = "#261416", "#d62839"
+BTN_BG, BTN_ON = "#1f1f1f", "#f0f0f0"
 FONT, FONT_BOLD, FONT_SMALL = ("Segoe UI", 12), ("Segoe UI", 12, "bold"), ("Segoe UI", 10)
 
 
@@ -325,9 +327,10 @@ class App:
         self.pin_btn.pack(side="right")
         self.pin_btn.bind("<Button-1>", lambda _e: self.toggle_on_top())
         self.root.bind_all("t", lambda _e: self.toggle_on_top())
+        self.root.bind_all("<Button-1>", self.open_profile, add="+")
         slider = tk.Scale(top, from_=MIN_OPACITY, to=100, orient="horizontal", length=70, width=10,
                           sliderlength=14, showvalue=False, bd=0, highlightthickness=0,
-                          bg=BTN_ON, activebackground=RED, troughcolor=BTN_BG, cursor="hand2",
+                          bg=BTN_ON, activebackground="#ffffff", troughcolor=BTN_BG, cursor="hand2",
                           command=lambda v: self.root.attributes("-alpha", int(v) / 100))
         slider.set(OPACITY)
         slider.pack(side="right", padx=(0, 10))
@@ -377,6 +380,11 @@ class App:
         self.on_top = not self.on_top
         self.apply_on_top()
         self.refresh()
+
+    def open_profile(self, e):
+        url = getattr(self.root.winfo_containing(e.x_root, e.y_root), "profile_url", None)
+        if url:
+            webbrowser.open(url)
 
     def set_mode(self, pid):
         self.mode, self.manual = pid, True
@@ -472,7 +480,7 @@ class App:
         return self.icons[(url, shape)]
 
     def style_button(self, button, on):
-        button.configure(bg=BTN_ON if on else BTN_BG, fg="#ffffff" if on else DIM)
+        button.configure(bg=BTN_ON if on else BTN_BG, fg=BG if on else DIM)
 
     def refresh(self):
         for pid, b in self.buttons.items():
@@ -519,15 +527,20 @@ class App:
         avatar = s.get("avatar") if s else None
         tk.Label(self.table, image=self.image_for(avatar, "avatar"), bg=KEY).grid(
             row=r, column=1, sticky="nsew", ipadx=2, ipady=2)
-        OutlinedText(self.table, p["name"], BLUE if p["team"] == 0 else ORANGE,
-                     FONT_BOLD if is_me else FONT).grid(row=r, column=2, sticky="nsew", ipadx=6)
+        name = OutlinedText(self.table, p["name"], BLUE if p["team"] == 0 else ORANGE,
+                            FONT_BOLD if is_me else FONT)
+        name.grid(row=r, column=2, sticky="nsew", ipadx=6)
+        target = lookup_target(pid, p["name"])
+        if target:
+            name.profile_url = PROFILE_URL.format(platform=target[0], identifier=quote(target[1], safe=""))
+            name.configure(cursor="hand2")
 
         if s is None:
             note, color = "loading…", DIM
         elif s.get("bot"):
             note, color = "bot", DIM
         elif "error" in s:
-            note, color = s["error"], RED
+            note, color = s["error"], FG
         else:
             note = None
         if note:
