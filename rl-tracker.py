@@ -10,6 +10,7 @@ import time
 import tkinter as tk
 import tkinter.font as tkfont
 import webbrowser
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from urllib.parse import quote
@@ -21,6 +22,11 @@ try:
     from PIL import Image, ImageDraw, ImageOps, ImageTk
 except ImportError:
     sys.exit("Missing packages. Run:  python -m pip install -r requirements.txt")
+
+set_window_owner = ctypes.windll.user32.SetWindowLongPtrW
+set_window_owner.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t)
+set_window_owner.restype = ctypes.c_ssize_t
+GWLP_HWNDPARENT = -8
 
 BROWSERS = ["safari", "firefox", "chrome", "edge"]
 
@@ -158,9 +164,7 @@ def lookup_target(primary_id, name):
 
 
 def guess_playlist(roster):
-    counts = {}
-    for p in roster.values():
-        counts[p["team"]] = counts.get(p["team"], 0) + 1
+    counts = Counter(p["team"] for p in roster.values())
     return TEAM_SIZE_TO_PLAYLIST.get(max(counts.values(), default=2), 11)
 
 
@@ -217,6 +221,7 @@ def stream_worker(q, host, port):
         if msg is None:
             if connected is not False:
                 q.put(("clear",))
+                q.put(("closed",))
                 q.put(("status", "Waiting for Rocket League…"))
                 signature, connected, me = None, False, None
             continue
@@ -246,8 +251,8 @@ def stream_worker(q, host, port):
                     q.put(("me", me))
         elif event == "MatchDestroyed":
             signature, me = None, None
-            q.put(("clear",))
-            q.put(("status", "Connected, waiting for a match"))
+            q.put(("menu",))
+            q.put(("status", "Main menu"))
 
 
 class OutlinedText(tk.Canvas):
@@ -304,9 +309,11 @@ class App:
         self.win = tk.Toplevel(self.root, bg=KEY)
         self.win.overrideredirect(True)
         self.win.attributes("-transparentcolor", KEY)
-        self.root.bind("<Configure>", lambda _e: self.follow())
-        self.root.bind("<Unmap>", lambda _e: self.win.withdraw())
-        self.root.bind("<Map>", lambda _e: (self.win.deiconify(), self.pin_layer(), self.follow()))
+        def window_only(handler):
+            return lambda e: handler() if e.widget is self.root else None
+        self.root.bind("<Configure>", window_only(self.follow))
+        self.root.bind("<Unmap>", window_only(self.win.withdraw))
+        self.root.bind("<Map>", window_only(self.on_map))
         self.apply_on_top()
         self.root.attributes("-alpha", OPACITY / 100)
         self.me_bar = tk.Frame(self.root, bg=ROW_ME)
@@ -328,12 +335,12 @@ class App:
         self.pin_btn.bind("<Button-1>", lambda _e: self.toggle_on_top())
         self.root.bind_all("t", lambda _e: self.toggle_on_top())
         self.root.bind_all("<Button-1>", self.open_profile, add="+")
-        slider = tk.Scale(top, from_=MIN_OPACITY, to=100, orient="horizontal", length=70, width=10,
-                          sliderlength=14, showvalue=False, bd=0, highlightthickness=0,
-                          bg=BTN_ON, activebackground="#ffffff", troughcolor=BTN_BG, cursor="hand2",
-                          command=lambda v: self.root.attributes("-alpha", int(v) / 100))
-        slider.set(OPACITY)
-        slider.pack(side="right", padx=(0, 10))
+        self.slider = tk.Scale(top, from_=MIN_OPACITY, to=100, orient="horizontal", length=70, width=10,
+                               sliderlength=14, showvalue=False, bd=0, highlightthickness=0,
+                               bg=BTN_ON, activebackground="#ffffff", troughcolor=BTN_BG, cursor="hand2",
+                               command=lambda v: self.set_opacity(int(v)))
+        self.slider.set(OPACITY)
+        self.slider.pack(side="right", padx=(0, 10))
         OutlinedText(top, "Opacity", DIM, FONT_SMALL).pack(side="right", padx=(0, 4))
         self.status_lbl = OutlinedText(top, "", DIM, FONT_SMALL)
         self.status_lbl.pack(side="right", padx=(0, 10))
@@ -344,13 +351,12 @@ class App:
         for c in (3, 4, 5):
             self.table.columnconfigure(c, minsize=72)
 
-    def pin_layer(self):
+    def on_map(self):
+        self.win.deiconify()
         self.win.update_idletasks()
-        set_owner = ctypes.windll.user32.SetWindowLongPtrW
-        set_owner.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t)
-        set_owner.restype = ctypes.c_ssize_t
-        set_owner(int(self.win.wm_frame(), 16), -8, int(self.root.wm_frame(), 16))
+        set_window_owner(int(self.win.wm_frame(), 16), GWLP_HWNDPARENT, int(self.root.wm_frame(), 16))
         self.win.lift()
+        self.follow()
 
     def follow(self):
         self.win.geometry(f"{self.root.winfo_width()}x{self.root.winfo_height()}"
@@ -390,6 +396,10 @@ class App:
         self.mode, self.manual = pid, True
         self.refresh()
 
+    def set_opacity(self, percent):
+        self.slider.set(percent)
+        self.root.attributes("-alpha", percent / 100)
+
     def poll(self):
         changed = False
         try:
@@ -401,6 +411,14 @@ class App:
                     self.status = item[1]
                 elif kind == "clear":
                     self.players, self.stats, self.manual = {}, {}, False
+                elif kind == "menu":
+                    me = self.players.get(self.me)
+                    self.players = {self.me: dict(me, team=0)} if me else {}
+                    self.stats = {pid: s for pid, s in self.stats.items() if pid in self.players}
+                    self.mode, self.manual = 11, False
+                elif kind == "closed":
+                    self.me = None
+                    self.set_opacity(100)
                 elif kind == "roster":
                     self.on_roster(item[1])
                 elif kind == "me":
